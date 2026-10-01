@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Game Tetes Penumbuh Jenggot</title>
+  <style>
+    body {
+      margin: 0;
+      background: #111827;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      overflow: hidden;
+    }
+    canvas {
+      border: 4px solid #f59e0b;
+      border-radius: 16px;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.8);
+      background: #1f2937;
+    }
+  </style>
+</head>
+<body>
+
+<canvas id="gameCanvas" width="450" height="650"></canvas>
+
+<script>
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+
+// --- 1. LOAD 3 GAMBAR UTAMA ---
+const imgBotol = new Image();
+imgBotol.src = 'botol.png';
+
+const imgWajahPolos = new Image();
+imgWajahPolos.src = 'wajah11.PNG'; // Wajah tanpa jenggot
+
+const imgWajahJenggot = new Image();
+imgWajahJenggot.src = 'wajah22.PNG'; // Wajah jenggot full
+
+// --- 2. FUNGSI PEMBANTU: GAMBAR PROPORSIONAL (MENCEGAH GAMBAR PENYOK) ---
+function drawAspectImage(img, dx, dy, dWidth, dHeight) {
+  const imgRatio = img.naturalWidth / img.naturalHeight;
+  const targetRatio = dWidth / dHeight;
+
+  let renderWidth = dWidth;
+  let renderHeight = dHeight;
+
+  // Sesuaikan skala agar gambar pas di dalam kotak dWidth x dHeight tanpa distorsi
+  if (imgRatio > targetRatio) {
+    renderHeight = dWidth / imgRatio;
+  } else {
+    renderWidth = dHeight * imgRatio;
+  }
+
+  // Posisikan tepat di tengah area yang ditentukan
+  const offsetX = dx + (dWidth - renderWidth) / 2;
+  const offsetY = dy + (dHeight - renderHeight) / 2;
+
+  ctx.drawImage(img, offsetX, offsetY, renderWidth, renderHeight);
+}
+
+// --- PENGATURAN SKENARIO / KAMERA ---
+let cameraY = 0;
+let targetCameraY = 0;
+
+// Status Game
+let gameState = 'START'; // 'START', 'DROPPING', 'GROWING', 'DONE'
+let dropY = 430;         
+let beardProgress = 0;    // 0 sampai 1 (transisi alpha/fade-in gambar jenggot)
+
+// Tombol Press
+const button = { x: 225, y: 250, radius: 40 };
+let pulseTime = 0;
+
+function drawBottle() {
+  ctx.save();
+  ctx.translate(225, 250);
+
+  // Gambar Botol Proporsional
+  if (imgBotol.complete && imgBotol.naturalWidth !== 0) {
+    drawAspectImage(imgBotol, -120, -200, 240, 380);
+  } else {
+    // Fallback bentuk botol standar jika gambar gagal load
+    ctx.fillStyle = '#d97706';
+    ctx.beginPath();
+    ctx.roundRect(-100, -180, 200, 320, 20);
+    ctx.fill();
+  }
+  ctx.restore();
+
+  // Animasi Tombol "PRESS"
+  if (gameState === 'START') {
+    pulseTime += 0.05;
+    const scale = 1 + Math.sin(pulseTime) * 0.12; 
+    const currentRadius = button.radius * scale;
+
+    ctx.save();
+    ctx.shadowColor = '#ef4444';
+    ctx.shadowBlur = 20 * scale;
+    
+    ctx.fillStyle = '#ef4444';
+    ctx.beginPath();
+    ctx.arc(button.x, button.y, currentRadius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.lineWidth = 4 * scale;
+    ctx.strokeStyle = '#ffffff';
+    ctx.stroke();
+
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = '#ffffff';
+    ctx.font = `bold ${Math.round(18 * scale)}px sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('PRESS', button.x, button.y);
+    ctx.restore();
+  }
+}
+
+
+function drawFace() {
+  ctx.save();
+  ctx.translate(225, 880);
+
+  // PENGATURAN POSISI GAMBAR KEDUA
+  // Ubah angka ini jika wajah masih belum sejajar
+  const offsetX = 4.8;  // Geser kanan (+) atau kiri (-)
+  const offsetY = 0;  // Geser bawah (+) atau atas (-)
+
+  // GAMBAR PERTAMA: WAJAH POLOS
+  if (imgWajahPolos.complete && imgWajahPolos.naturalWidth > 0) {
+    drawAspectImage(
+      imgWajahPolos,
+      -150,
+      -150,
+      300,
+      300
+    );
+  }
+
+
+
+
+  // GAMBAR KEDUA: WAJAH BERJENGGOT
+  // Ukuran sama, dengan posisi yang bisa disesuaikan
+  if (
+    imgWajahJenggot.complete &&
+    imgWajahJenggot.naturalWidth > 0
+  ) {
+    ctx.save();
+    ctx.globalAlpha = beardProgress;
+
+    drawAspectImage(
+      imgWajahJenggot,
+      -150 + offsetX,
+      -150 + offsetY,
+      300,
+      300
+    );
+
+    ctx.restore();
+  }
+
+  ctx.restore();
+}
+
+
+function drawRestartButton() {
+  const x = 225;
+  const y = 600;
+  const width = 190;
+  const height = 46;
+
+  ctx.save();
+
+  // Bayangan tombol
+  ctx.shadowColor = 'rgba(0, 0, 0, 0.4)';
+  ctx.shadowBlur = 10;
+
+  // Background tombol
+  ctx.fillStyle = '#10b981';
+  ctx.beginPath();
+  ctx.roundRect(
+    x - width / 2,
+    y - height / 2,
+    width,
+    height,
+    12
+  );
+  ctx.fill();
+
+  // Teks tombol
+  ctx.shadowBlur = 0;
+  ctx.fillStyle = '#ffffff';
+  ctx.font = 'bold 16px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('↻ Restart', x, y);
+
+  ctx.restore();
+}
+
+function drawDropAnimation() {
+  if (gameState === 'DROPPING') {
+    ctx.fillStyle = '#06b6d4';
+    ctx.beginPath();
+    ctx.arc(225, dropY, 12, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = '#a5f3fc';
+    ctx.beginPath();
+    ctx.arc(221, dropY - 4, 4, 0, Math.PI * 2);
+    ctx.fill();
+
+    dropY += 3;
+    targetCameraY = Math.min(500, dropY - 200);
+
+    if (dropY >= 800) {
+      gameState = 'GROWING';
+    }
+  }
+}
+
+function updateLogic() {
+  cameraY += (targetCameraY - cameraY) * 0.08;
+
+  if (gameState === 'GROWING') {
+    beardProgress += 0.03;
+    if (beardProgress >= 1) {
+      beardProgress = 1;
+      gameState = 'DONE';
+    }
+  }
+}
+
+function drawErhaSlogan() {
+  // Tulisan hanya muncul setelah cairan menyentuh wajah
+  if (gameState !== 'GROWING' && gameState !== 'DONE') return;
+
+  const time = performance.now() / 1000;
+
+  // Animasi naik-turun
+  const moveY = Math.sin(time * 2) * 6;
+
+  // Efek membesar dan mengecil
+  const scale = 1 + Math.sin(time * 2.5) * 0.04;
+
+  ctx.save();
+
+  ctx.translate(canvas.width / 2, 120 + moveY);
+  ctx.scale(scale, scale);
+
+  // Tulisan ERHA
+  ctx.fillStyle = '#D4A85A';
+  ctx.font = 'bold 26px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.shadowColor = '#D4A85A';
+  ctx.shadowBlur = 12;
+  ctx.fillText('ERHA', 0, -15);
+
+  // Slogan
+  ctx.fillStyle = '#ffffff';
+  ctx.font = 'bold 15px sans-serif';
+  ctx.shadowColor = '#ffffff';
+  ctx.shadowBlur = 6;
+  ctx.fillText('Reveal Your Best Self.', 0, 18);
+
+  ctx.restore();
+}
+
+function drawIntroText() {
+  if (gameState !== 'START') return;
+
+  // Waktu animasi
+  const time = performance.now() / 1000;
+
+  // Gerakan naik-turun
+  const moveY = Math.sin(time * 2) * 5;
+
+  // Efek membesar dan mengecil
+  const scale = 1 + Math.sin(time * 2.5) * 0.04;
+
+  ctx.save();
+
+  // Titik pusat animasi
+  ctx.translate(canvas.width / 2, 80 + moveY);
+  ctx.scale(scale, scale);
+
+  // Baris pertama
+  ctx.fillStyle = '#ffffff';
+  ctx.font = 'bold 23px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+
+  // Efek cahaya
+  ctx.shadowColor = '#f59e0b';
+  ctx.shadowBlur = 10 + Math.sin(time * 3) * 5;
+
+  ctx.fillText('What if skincare', 0, -15);
+
+  // Baris kedua dengan warna emas
+  ctx.fillStyle = '#fbbf24';
+  ctx.fillText('became a game?', 0, 15);
+
+  ctx.restore();
+}
+
+function render() {
+  updateLogic();
+
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  ctx.save();
+  ctx.translate(0, -cameraY);
+
+  drawFace();
+  drawBottle();
+  drawDropAnimation();
+
+  ctx.restore();
+
+  // Tombol mulai ulang muncul setelah game selesai
+  if (gameState === 'DONE') {
+    drawRestartButton();
+  }
+
+  // Animasi slogan ERHA dan teks pembuka
+  drawErhaSlogan();
+
+  drawIntroText();
+
+  requestAnimationFrame(render);
+}
+
+
+
+
+canvas.addEventListener('click', (e) => {
+  const rect = canvas.getBoundingClientRect();
+
+  const mouseX =
+    (e.clientX - rect.left) * (canvas.width / rect.width);
+
+  const mouseY =
+    (e.clientY - rect.top) * (canvas.height / rect.height);
+
+  // Klik tombol mulai ulang setelah game selesai
+  if (gameState === 'DONE') {
+    const buttonX = 225;
+    const buttonY = 600;
+    const buttonWidth = 190;
+    const buttonHeight = 46;
+
+    if (
+      mouseX >= buttonX - buttonWidth / 2 &&
+      mouseX <= buttonX + buttonWidth / 2 &&
+      mouseY >= buttonY - buttonHeight / 2 &&
+      mouseY <= buttonY + buttonHeight / 2
+    ) {
+      // Reset seluruh status game
+      gameState = 'START';
+      dropY = 430;
+      beardProgress = 0;
+      cameraY = 0;
+      targetCameraY = 0;
+      pulseTime = 0;
+    }
+
+    return;
+  }
+
+  // Tombol PRESS pada awal permainan
+  if (gameState !== 'START') return;
+
+  const dist = Math.hypot(
+    mouseX - button.x,
+    mouseY - button.y
+  );
+
+  if (dist < button.radius * 1.2) {
+    gameState = 'DROPPING';
+  }
+});
+
+render();
+</script>
+
+</body>
+</html>
